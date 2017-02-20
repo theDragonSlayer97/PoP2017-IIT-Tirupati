@@ -1,0 +1,13 @@
+type stack
+    ar :: Array{Int}
+end
+
+function push(st :: stack, data :: Int)
+    push!(st.ar, data)
+end
+
+function pop(st :: stack)
+    pop!(st.ar)
+end
+
+st = stack([])

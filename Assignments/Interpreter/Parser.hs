@@ -95,19 +95,26 @@ hasMoreTokens :: [Token] -> Bool
 hasMoreTokens (x : _) = undefined
 
 --Parser - we implement our grammar rules here
--- expr -> term ['+'|'-' expr]* | Identifier '=' expr
--- term -> factor ['*'|'/' term]*
+-- expr -> term ['+'|'-' term]* | Identifier '=' expr
+-- term -> factor ['*'|'/' factor]*
 -- factor -> '(' expr ')' | identifier | number
 
+helperterm :: (Tree, [Token]) -> (Tree, [Token])
+helperterm (ltree, toks) =
+    let (factTree, toks') = factor (eatToken toks) in
+      case whichOperator (getToken toks) of "MULT"-> helperterm (ProdNode "MULT" ltree factTree, toks')
+                                            "DIV" -> helperterm (ProdNode "DIV" ltree factTree, toks')
+                                            _     -> (ltree, toks)
+
+helperexpr ::(Tree, [Token]) -> (Tree, [Token])
+helperexpr (ltree, toks) =
+  let (termTree, toks') = term (eatToken toks) in
+    case whichOperator (getToken toks) of "PLUS"-> helperexpr (SumNode "PLUS" ltree termTree, toks')
+                                          "MINUS" -> helperexpr (SumNode "MINUS" ltree  termTree, toks')
+                                          _     -> (ltree, toks)
+
 term :: [Token] ->  (Tree, [Token])
-term toks =
-    let (factTree, toks') = factor toks
-    in
-        case whichOperator (getToken toks') of "MULT" -> let (termTree', toks'') = term (eatToken toks')
-                                                         in (ProdNode "MULT" factTree termTree', toks'' )
-                                               "DIV"  -> let (termTree', toks'') = term (eatToken toks')
-                                                         in (ProdNode "DIV" factTree termTree', toks'' )
-                                               _      -> (factTree, toks')
+term toks = helperterm (factor toks)
 
 factor:: [Token] -> (Tree, [Token])
 factor toks =
@@ -124,18 +131,7 @@ expr:: [Token] -> (Tree, [Token])
 expr toks =
   case getToken toks of Identifier s -> case (getToken.eatToken) toks of Assign -> let (expTree, toks') = expr ((eatToken.eatToken) toks)
                                                                                    in (AssignNode s expTree, toks')
-                                                                         _      -> let (termTree, toks') = term toks
-                                                                                         in case (whichOperator.getToken) toks' of "PLUS" -> let (exprTree', toks'') = expr (eatToken toks')
-                                                                                                                                             in (SumNode ((whichOperator.getToken) toks') termTree exprTree', toks'')
-                                                                                                                                   "MINUS"-> let (exprTree', toks'') = expr (eatToken toks')
-                                                                                                                                             in (SumNode ((whichOperator.getToken) toks') termTree exprTree', toks'')
-                                                                                                                                   _      -> (termTree, toks')
-                        _            -> let (termTree, toks') = term toks
-                                        in case (whichOperator.getToken) toks' of "PLUS" -> let (exprTree', toks'') = expr (eatToken toks')
-                                                                                            in (SumNode ((whichOperator.getToken) toks') termTree exprTree', toks'')
-                                                                                  "MINUS"-> let (exprTree', toks'') = expr (eatToken toks')
-                                                                                            in (SumNode ((whichOperator.getToken) toks') termTree exprTree', toks'')
-                                                                                  _      -> (termTree, toks')
+                        _            -> helperexpr (term toks)
 
 parse:: [Token] -> Tree
 parse toks = let (tree, toks') = expr toks
@@ -143,6 +139,7 @@ parse toks = let (tree, toks') = expr toks
                 if (show (getToken toks')) == "TokEnd" then tree else error $ "parsing error: leftover tokens" ++ (show toks')
 
 evalTree:: Tree -> Int
+--evalTree (VarNode x) = find value of x from map(or list)
 evalTree (NumNodeInt x) = x
 evalTree (SumNode op leftTree rightTree) = case op of "PLUS" -> (evalTree leftTree + evalTree rightTree)
                                                       "MINUS"-> (evalTree leftTree - evalTree rightTree)
@@ -154,4 +151,5 @@ evalTree _ = error "Awkward evaluation state"
 
 
 main = do
-  print (evalTree (parse (tokenise " 1 / 2 ")))
+  --print (evalTree (parse (tokenise " 1 / 2 ")))
+  print ((evalTree.parse.tokenise) " 2-(4-2*2-5-7*3)/6/(((2))) ")

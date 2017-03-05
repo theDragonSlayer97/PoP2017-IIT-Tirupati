@@ -1,7 +1,6 @@
---Imports
 import Data.Char
 import Data.List
-
+import qualified Data.Map as DM
 --Reserved words in julia
 listOfReservedWords = ["if",
                        "else",
@@ -26,11 +25,7 @@ isSubstring ls hs = isInfixOf ls hs
 
 --Function to return a constant type token from stream and return the rest of stream
 getNumberToken :: String -> (Token, String)
-getNumberToken xs = let (i, str) = getInteger xs
-                    in case (head str == '.') of
-                      True -> (ConstDouble ((read ((show i) ++ "." ++ (takeWhile isDigit (tail str))))::Double), (dropWhile isDigit (tail str)))
-                      False -> (ConstInt i, str)
-
+getNumberToken xs = let (i, str) = getInteger xs in (ConstInt i, str)
 
 --Function to parse Identifier from input stream
 getIdentifier :: String -> (String, String)
@@ -132,6 +127,8 @@ helperterm (ltree, toks) =
                                             "MOD" -> helperterm (ANode "MOD" ltree factTree, toks')
                                             _     -> (ltree, toks)
 
+
+
 helperexpr ::(Tree, [Token]) -> (Tree, [Token])
 helperexpr (ltree, toks) =
   let (termTree, toks') = term (eatToken toks) in
@@ -147,7 +144,7 @@ factor toks =
   case getToken toks of  Identifier s     -> (VarNode s, eatToken toks)
                          ConstInt n       -> (NumNodeInt n, eatToken toks)
                          ConstDouble n    -> (NumNodeDouble n, eatToken toks)
-                         LPar             -> let (expTree, toks') = expr (eatToken toks)
+                         LPar             -> let (expTree, toks') = logicalExpr (eatToken toks)
                                              in
                                                 case (getToken toks') of RPar -> (expTree, eatToken toks')
                                                                          _    -> (error "Missing Right Parenthesis" )
@@ -155,8 +152,9 @@ factor toks =
 
 expr:: [Token] -> (Tree, [Token])
 expr toks =
-  case getToken toks of Identifier s -> case (getToken.eatToken) toks of Assign -> let (expTree, toks') = expr ((eatToken.eatToken) toks)
-                                                                                   in (AssignNode s expTree, toks')
+  case getToken toks of Identifier s -> case (getToken.eatToken) toks of  Assign -> let (expTree, toks') = expr ((eatToken.eatToken) toks)
+                                                                                    in (AssignNode s expTree, toks')
+                                                                          _      -> helperexpr (term toks)
                         _            -> helperexpr (term toks)
 
 logicalExpr :: [Token] -> (Tree, [Token])
@@ -167,26 +165,42 @@ parse toks = let (tree, toks') = logicalExpr toks
              in
                 if (show (getToken toks')) == "TokEnd" then tree else error $ "parsing error: leftover tokens" ++ (show toks')
 
-evalTree:: Tree -> Int
+type SymTab = DM.Map String Int
+
+
+evalTree:: Tree -> SymTab -> (Int,SymTab)
 --Multiple relational operations can be parsed but can't be executed
---evalTree (VarNode x) = find value of x from map(or list)
-evalTree (NumNodeInt x) = x
-evalTree (ANode op leftTree rightTree) = case op of "PLUS" -> (evalTree leftTree + evalTree rightTree)
-                                                    "MINUS"-> (evalTree leftTree - evalTree rightTree)
-                                                    "MULT" -> (evalTree leftTree * evalTree rightTree)
-                                                    "DIV"  -> (evalTree leftTree `div` evalTree rightTree)
-                                                    "MOD"  -> (evalTree leftTree `rem` evalTree rightTree)
-                                                    _      -> error "Unkown Operator at ANode eval"
-evalTree (RNode op leftTree rightTree) = case op of "<"    -> if (evalTree leftTree < evalTree rightTree) then 1 else 0
-                                                    ">"    -> if (evalTree leftTree > evalTree rightTree) then 1 else 0
-                                                    "<="   -> if (evalTree leftTree <= evalTree rightTree) then 1 else 0
-                                                    ">="   -> if (evalTree leftTree >= evalTree rightTree) then 1 else 0
-                                                    "=="   -> if (evalTree leftTree == evalTree rightTree) then 1 else 0
-                                                    "!="   -> if (evalTree leftTree /= evalTree rightTree) then 1 else 0
-                                                    _      -> error "Unkown Operator at RNode eval"
-evalTree _ = error "Awkward evaluation state"
+evalTree (VarNode x) symtab =
+   case DM.lookup x symtab of Just v -> (v,symtab)
+                              Nothing -> error $ "undefined variable:" ++ x
+evalTree (NumNodeInt x) symtab = (x,symtab)
+evalTree (ANode op leftTree rightTree) symtab = case op of "PLUS" -> ((fst(evalTree leftTree symtab)) + (fst(evalTree rightTree symtab)),symtab)
+                                                           "MINUS"-> ((fst(evalTree leftTree symtab)) - (fst(evalTree rightTree symtab)),symtab)
+                                                           "MULT" -> ((fst(evalTree leftTree symtab)) * (fst(evalTree rightTree symtab)),symtab)
+                                                           "DIV"  -> ((fst(evalTree leftTree symtab)) `div` (fst(evalTree rightTree symtab)),symtab)
+                                                           "MOD"  -> ((fst(evalTree leftTree symtab)) `rem` (fst(evalTree rightTree symtab)),symtab)
+                                                           _      -> error "Unkown Operator at ANode eval"
+evalTree (RNode op leftTree rightTree) symtab = case op of "<"    -> if ((fst(evalTree leftTree symtab)) < (fst(evalTree rightTree symtab))) then (1,symtab) else (0,symtab)
+                                                           ">"    -> if ((fst(evalTree leftTree symtab)) > (fst(evalTree rightTree symtab))) then (1,symtab) else (0,symtab)
+                                                           "<="   -> if ((fst(evalTree leftTree symtab)) <= (fst(evalTree rightTree symtab))) then (1,symtab) else (0,symtab)
+                                                           ">="   -> if ((fst(evalTree leftTree symtab)) >= (fst(evalTree rightTree symtab))) then (1,symtab) else (0,symtab)
+                                                           "=="   -> if ((fst(evalTree leftTree symtab)) == (fst(evalTree rightTree symtab))) then (1,symtab) else (0,symtab)
+                                                           "!="   -> if ((fst(evalTree leftTree symtab)) /= (fst(evalTree rightTree symtab))) then (1,symtab) else (0,symtab)
+                                                           _      -> error "Unkown Operator at RNode eval"
 
+evalTree (AssignNode string tree) symtab = let (val,symtab') = (evalTree tree symtab) in (val,(DM.insert string val symtab'))
+evalTree _ symtab= error "Awkward evaluation state"
 
+loop :: SymTab -> [String] -> IO(Int)
+loop _ [] = return 1
+loop symtab program =
+  let (val,symTab') = evalTree ((parse.tokenise) (head program)) symtab
+    in do
+      print val
+      loop symTab' (tail program)
 main = do
-  --print (evalTree (parse (tokenise " 1 / 2 ")))
-  print ((evalTree.parse.tokenise) "1%2 == 1 ")
+  let program = ["x=1+2",
+                  "y=7*x*x+x",
+                  "y+6*9"
+                  ] -- This holds our program as in...
+  loop (DM.fromList []) program

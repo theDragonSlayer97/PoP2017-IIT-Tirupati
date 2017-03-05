@@ -178,11 +178,11 @@ evalTree (ANode op leftTree rightTree) = case op of "PLUS" -> (evalTree leftTree
                                                     "MOD"  -> (evalTree leftTree `rem` evalTree rightTree)
                                                     _      -> error "Unkown Operator at ANode eval"
 evalTree (RNode op leftTree rightTree) = case op of "<"    -> if (evalTree leftTree < evalTree rightTree) then 1 else 0
-                                                    ">"    -> if (evalTree leftTree < evalTree rightTree) then 1 else 0
-                                                    "<="   -> if (evalTree leftTree < evalTree rightTree) then 1 else 0
-                                                    ">="   -> if (evalTree leftTree < evalTree rightTree) then 1 else 0
-                                                    "=="   -> if (evalTree leftTree < evalTree rightTree) then 1 else 0
-                                                    "!="   -> if (evalTree leftTree < evalTree rightTree) then 1 else 0
+                                                    ">"    -> if (evalTree leftTree > evalTree rightTree) then 1 else 0
+                                                    "<="   -> if (evalTree leftTree <= evalTree rightTree) then 1 else 0
+                                                    ">="   -> if (evalTree leftTree >= evalTree rightTree) then 1 else 0
+                                                    "=="   -> if (evalTree leftTree == evalTree rightTree) then 1 else 0
+                                                    "!="   -> if (evalTree leftTree /= evalTree rightTree) then 1 else 0
                                                     _      -> error "Unkown Operator at RNode eval"
 evalTree _ = error "Awkward evaluation state"
 
